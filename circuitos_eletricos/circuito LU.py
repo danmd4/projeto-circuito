@@ -1,114 +1,87 @@
 import numpy as np
 
-def fatoracao_lup(A_in):
-
-    U = A_in.copy().astype(float)
-    n = len(U)
+class DoolittleSolver:
+    """Implementação do método de Doolittle para decomposição LU"""
     
-
-    L = np.eye(n) 
-    P = np.eye(n) 
-
-    for k in range(n - 1): 
+    def __init__(self, tol=1e-12):
+        self.tol = tol
+        self.L = None
+        self.U = None
+    
+    def decompose(self, A):
+        """Decomposição LU pelo método de Doolittle"""
+        A = np.array(A, dtype=float)
+        n = A.shape[0]
+        L = np.eye(n)
+        U = np.zeros((n, n))
         
-       
-        p = np.argmax(np.abs(U[k:, k])) + k 
-        
-      
-        if np.isclose(U[p, k], 0):
-            raise ValueError("Erro: Matriz singular detectada.")
+        for j in range(n):
+            # Calcular coluna j de U
+            for i in range(j + 1):
+                U[i,j] = A[i,j] - np.sum(L[i,:i] * U[:i,j])
             
-       
-        U[[k, p]] = U[[p, k]]
-        
-       
-        P[[k, p]] = P[[p, k]]
-        
-     
-        L[[k, p], :k] = L[[p, k], :k]
-        
-
-        for i in range(k + 1, n): 
-            L[i, k] = U[i, k] / U[k, k]
+            if abs(U[j,j]) < self.tol:
+                raise ValueError("Matriz singular")
             
-            
-            U[i, k:] = U[i, k:] - L[i, k] * U[k, k:]
-            
-    
-    U = np.triu(U)
-            
-    return L, U, P 
-
-def substituicao_direta(L, b_prime):
-  
-    n = len(b_prime)
-    y = np.zeros(n)
-    
-    for i in range(n):
-        soma = sum(L[i, j] * y[j] for j in range(i))
-        y[i] = b_prime[i] - soma
-       
+            # Calcular coluna j de L
+            for i in range(j + 1, n):
+                L[i,j] = (A[i,j] - np.sum(L[i,:j] * U[:j,j])) / U[j,j]
         
-    return y
-
-def substituicao_retroativa(U, y):
-  
-    n = len(y)
-    x = np.zeros(n)
+        self.L, self.U = L, U
+        return L, U
     
-    for i in range(n - 1, -1, -1):
-        soma = sum(U[i, j] * x[j] for j in range(i + 1, n))
-        x[i] = (y[i] - soma) / U[i, i]
+    def solve(self, A, b):
+        """Resolve AX = b usando decomposição LU"""
+        b = np.array(b, dtype=float)
         
-    return x
+        if self.L is None:
+            self.decompose(A)
+        
+        # Substituição progressiva: LY = b
+        n = len(b)
+        Y = np.zeros(n)
+        for i in range(n):
+            Y[i] = b[i] - np.sum(self.L[i,:i] * Y[:i])
+        
+        # Substituição regressiva: UX = Y
+        X = np.zeros(n)
+        for i in range(n-1, -1, -1):
+            X[i] = (Y[i] - np.sum(self.U[i,i+1:] * X[i+1:])) / self.U[i,i]
+        
+        return X
 
-def resolver_sistema_lup(A, b):
-   
-
-    L, U, P = fatoracao_lup(A)
+def analisar_circuito():
+    """Análise do circuito elétrico com fontes dependentes"""
+    # Matriz do sistema
+    A = np.array([
+        [6, 0, 0, 0, -1, -1, 0],
+        [0, 12, -8, 0, 0, 1, 0],
+        [0, -8, 10, 0, 0, 0, 0],
+        [0, 0, 0, 2, 1, 0, 0],
+        [1, 0, 0, -1, 0, 0, 0],
+        [1, -1, 0, 0, 0, 0, -3],
+        [0, 0, 1, 0, 0, 0, 1]
+    ])
     
- 
-    b_prime = np.dot(P, b)
+    # Vetor independente
+    B = np.array([0, 0, -10, 0, 5, 0, 0])
     
-
-    y = substituicao_direta(L, b_prime)
+    # Resolver sistema
+    solver = DoolittleSolver()
+    X = solver.solve(A, B)
     
-
-    x = substituicao_retroativa(U, y)
+    # Resultados
+    variaveis = ['i1', 'i2', 'i3', 'i4', 'v5Λ', 'v3ix', 'ix']
+    referencia = [-2.5000, 3.9300, 2.1400, -7.5000, 15.0000, -30.0000, -2.1400]
     
-    return x, L, U, P
-
-
+    print("Solução do Circuito:")
+    for i, (var, x_val, ref) in enumerate(zip(variaveis, X, referencia)):
+        erro = abs((x_val - ref) / ref * 100) if ref != 0 else 0
+        print(f"{var}: {x_val:.4f} (ref: {ref:.4f}, erro: {erro:.2f}%)")
+    
+    # Verificação
+    residuo = np.linalg.norm(A @ X - B)
+    print(f"\nResíduo: {residuo:.2e}")
 
 if __name__ == "__main__":
-
-    A = np.array([
-        [1.0,     -1.0,    0.0,     0.0],
-        [-0.3333,  0.8333, 0.0,    -0.3333],
-        [0.0,     -0.1667, 0.4167, -0.1667],
-        [0.0,      1.3333, 0.0,     1.0]
-    ])
-
-
-    b = np.array([20.0, 0.0, 0.0, 0.0])
-
-    print("--- Resolvendo Circuito (Exemplo 9) ---")
-    print(f"Matriz A:\n{A}")
-    print(f"Vetor b: {b}\n")
-
-
-    x_calc, L_calc, U_calc, P_calc = resolver_sistema_lup(A, b)
-
-    print("--- Resultados da Fatoração ---")
-    print(f"Matriz P (Permutação):\n{P_calc}\n")
-    print(f"Matriz L (Inferior):\n{np.round(L_calc, 4)}\n")
-    print(f"Matriz U (Superior):\n{np.round(U_calc, 4)}\n")
-
-    print("--- Solução Final (Tensões Nodais) ---")
-
-    print(f"Solução calculada x: {np.round(x_calc, 4)}")
-    
-
-    residuo = np.dot(A, x_calc) - b
-    norma_residuo = np.linalg.norm(residuo)
-    print(f"\nNorma do Resíduo ||Ax - b||: {norma_residuo:.4e}")
+    analisar_circuito()
